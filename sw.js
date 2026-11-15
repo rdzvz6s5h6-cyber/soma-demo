@@ -1,7 +1,7 @@
-// Soma Demo 0.2 – service worker
+// Soma Demo 0.3 – service worker
 // Nätverk först, cache som reservläge: nya filer hämtas automatiskt när man är online,
 // och appen fungerar offline efter första besöket. Gamla cachar rensas vid aktivering.
-const CACHE = 'soma-demo-v2';
+const CACHE = 'soma-demo-v3';
 const ASSETS = ['./', './index.html', './app.js', './manifest.webmanifest', './icon.svg', './icon-192.png', './icon-512.png'];
 
 self.addEventListener('install', e => {

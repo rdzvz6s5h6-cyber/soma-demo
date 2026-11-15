@@ -1,24 +1,22 @@
-# Soma Demo 0.2 – ENDAST FIKTIVA DATA
+# Soma Demo 0.3 – ENDAST FIKTIVA DATA
 
-**Status: testad i Chromium på dator (61 av 61 automatiska kontroller, `tests/beta02_browsertest.js`). EJ testad på Android eller med riktig installation.** Beta 0.1 ligger orörd i `../beta_01/`.
+**Status: testad i Chromium på dator (88 av 88 automatiska kontroller, `tests/beta03_browsertest.js`, även under undersökväg). EJ testad på riktig iPhone/Android. Håll-och-dra-gesten är bara simulerad med mus/pekare i Chromium.** 0.1 och 0.2 ligger orörda i `../beta_01/` och `../beta_02/`.
 
-## Nytt jämfört med 0.1
-- Lagringslager (`store`): appen rör inte IndexedDB direkt, så lagringen kan bytas (t.ex. mot SQLite) senare.
-- Strikt importvalidering: värdet måste passa kategorins typ (skala 1–10, tal, ja/nej); okända fält kastas; import sker i en transaktion (allt eller inget).
-- Händelser kan få valfri sluttid (`endedAt`).
-- Fliken **Mönster**: välj två saker (A och B). Visar hur många tillfällen av A som ligger nära B, jämfört med vad slumpen ger, med antal och försiktig text. Se `../../docs/` för bakgrund.
-- **Fiktivt halvår**: knapp i Mer-fliken som fyller appen med påhittad data (markerad `source: demo`, kan tas bort separat).
-- **CSV-export**: svensk Excel (semikolon, decimalkomma) och internationell (komma, decimalpunkt). Båda med UTF-8 BOM.
-- Service worker: nätverk först med cache som reserv, gamla cachar rensas. Ingen manuell versionsbump behövs för att få nya filer.
-- Ingen hårdkodad personlig hälsning.
+## Nytt jämfört med 0.2 (utifrån din första iPhone-feedback)
+1. **Tre flikar i stället för sex:** Idag, Kalender, Mönster. Inställningar och data ligger bakom kugghjulet uppe till höger.
+2. **Idag:** all registrering på ett ställe. Check-in och händelse är samma flöde. Knapparna visar dagens värde. Två grupper: "Hur mår du?" och "Något hände".
+3. **Tryck eller håll och dra:** tryck på en knapp öppnar ett ark (reglage 1–10 med synligt värde, tid, valfri sluttid för händelser, anteckning). På skalor 1–10: håll in en knapp (≈0,35 s) och dra upp/ned, släpp sparar direkt (start 5, 24 px per steg). Håll utan att dra öppnar arket. Dra långt åt sidan avbryter. Rör du fingret innan håll är det vanlig scroll.
+4. **Ångra:** efter varje sparning visas "Ångra" i några sekunder.
+5. **Kalender i stället för historik:** månadsvy där dagar färgas i tre nyanser efter hur mycket som loggats, och streckade dagar där inget loggats (från första loggade dag till idag). Tryck på en dag för att se och ta bort poster.
+6. Mönster, export/import, CSV, fiktivt halvår och lagring är oförändrade (samma databas och JSON-format).
 
-- Sidan har `noindex` (ska inte listas i sökmotorer) och använder bara relativa sökvägar, så den fungerar under en undersökväg som `/soma-demo/`.
+## Ändrat utseende/text
+Skalvärden visas som "6 av 10". Datum skrivs "Söndag 15 november".
 
-## Samma som 0.1
-Databasnamn `soma-demo-v1` och JSON-formatet `soma-observations-v1` (version 1, `endedAt` är ett valfritt tillägg), så data från 0.1 finns kvar.
-
-## Platshållare att validera (kod: konstanter överst i app.js)
-`MIN_N = 6` (för få tillfällen), `STRONG_DIFF = 20` (procentenheter över slumpen för "värt att följa"). Båda är gissningar.
-
-## Kända begränsningar
-Inga konton, ingen kryptering, ingen synk. Tidszon: poster sparas som lokal tid utan zon; mönstren räknar kalenderdagar. Inte testad på Android/iOS. Bottenmenyn har 6 flikar och kontrollerades bara visuellt på 390 px bredd i Chromium.
+## Känt / ej verifierat
+- Håll-och-dra på riktig iPhone: risk för konflikt med scroll, textmarkering eller systemgester. Måste provas.
+- Registrering görs med klockslag (inte bara dag). Flera registreringar samma dag av samma sak är tillåtna.
+- Heatmapen räknar antal poster, inte hur "bra" en dag var.
+- Tidigare 6-flikars historikvy är borttagen. Radering sker i kalenderns dagdetalj eller i listan på Idag.
+- Platshållare i Mönster är oförändrade (`MIN_N = 6`, `STRONG_DIFF = 20`).
+- Tema (mörkt/lila) är inte genomfört, kommer som egen release.

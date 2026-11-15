@@ -1,5 +1,5 @@
 'use strict';
-/* Soma Demo 0.2 – endast fiktiva data.
+/* Soma Demo 0.3 – endast fiktiva data.
    Ändringar mot 0.1: lagringslager (store), strikt importvalidering, valfri sluttid på händelser,
    mönstervy (jämför två saker), fiktivt halvår, CSV-export. Samma databas och JSON-format (v1). */
 
@@ -21,7 +21,6 @@ const defaults = [
 
 let tab = 'home';
 let state = { trackers: [], observations: [] };
-let shown = 150;
 let pat = { a: 'migraine_aura', b: 'period_start', w: 3 };
 
 /* ---------- Lagringslager: resten av appen rör aldrig IndexedDB direkt ---------- */
@@ -86,12 +85,18 @@ function dayNum(s) {
 }
 const dayStr = n => new Date(n * 86400000).toISOString().slice(0, 10);
 
-function toast(msg) {
+function toast(msg, undo) {
   const t = document.getElementById('toast');
   t.textContent = msg;
+  if (undo) {
+    const b = document.createElement('button');
+    b.className = 'undo'; b.textContent = 'Ångra';
+    b.onclick = async () => { t.style.display = 'none'; await undo(); };
+    t.append(' ·', b);
+  }
   t.style.display = 'block';
   clearTimeout(toast.h);
-  toast.h = setTimeout(() => { t.style.display = 'none'; }, 3500);
+  toast.h = setTimeout(() => { t.style.display = 'none'; }, undo ? 6000 : 3500);
 }
 const tracker = id => state.trackers.find(t => t.id === id);
 const plural = (n, one, many) => n + ' ' + (n === 1 ? one : many);
@@ -111,70 +116,183 @@ function nav(name) {
 
 /* ---------- Vyer ---------- */
 function render() {
-  ({ home: homeView, checkin: checkinView, event: eventView, patterns: patternView, history: historyView, settings: settingsView }[tab] || homeView)();
+  ({ home: homeView, calendar: calendarView, patterns: patternView, settings: settingsView }[tab] || homeView)();
+}
+
+const MONTHS = ['januari', 'februari', 'mars', 'april', 'maj', 'juni', 'juli', 'augusti', 'september', 'oktober', 'november', 'december'];
+const longDate = s => { const n = dayNum(s); if (n === null) return s; const t = new Date(n * 86400000).toLocaleDateString('sv-SE', { weekday: 'long', day: 'numeric', month: 'long', timeZone: 'UTC' }); return t.charAt(0).toUpperCase() + t.slice(1); };
+const todayObs = () => state.observations.filter(o => o.occurredAt.slice(0, 10) === today());
+
+/* ---------- Idag: all registrering på ett ställe ---------- */
+function trackerButton(t) {
+  const mine = todayObs().filter(o => o.trackerId === t.id);
+  let status = '';
+  if (mine.length) {
+    const o = mine[0], extra = mine.length > 1 ? ` (+${mine.length - 1})` : '';
+    status = (t.kind === 'boolean' ? (o.value === false ? 'Nej idag' : 'Ja idag') : 'Idag: ' + o.value) + extra;
+  }
+  return `<button type="button" class="tb${mine.length ? ' done' : ''}" data-track="${esc(t.id)}"><span>${esc(t.label)}</span><small>${status || '&nbsp;'}</small></button>`;
 }
 
 function homeView() {
-  const count = state.observations.length;
-  el().innerHTML = `<h1>Hej</h1><p class="lead muted">Din plats för att förstå hur saker hänger ihop. Just nu testar vi bara med påhittade uppgifter.</p>
-<div class="notice small"><strong>Testläge:</strong> Registrera inga riktiga hälsouppgifter. All data sparas lokalt i den här webbläsaren och kan raderas.</div>
-<div class="two"><div class="stat"><b>${count}</b><span class="small">registreringar</span></div><div class="stat"><b>${state.trackers.length}</b><span class="small">saker att följa</span></div></div>
-<section class="card"><h2>Vad vill du göra?</h2><div class="actions"><button class="btn primary" id="goCheck">Daglig check-in</button><button class="btn soft" id="goEvent">Registrera händelse</button></div>
-<div class="actions" style="margin-top:9px"><button class="btn" id="goPat">Se mönster</button></div></section>
-<section class="card"><h2>Senaste registreringarna</h2>${entries(state.observations.slice(0, 3))}</section>`;
-  document.getElementById('goCheck').onclick = () => nav('checkin');
-  document.getElementById('goEvent').onclick = () => nav('event');
-  document.getElementById('goPat').onclick = () => nav('patterns');
+  const grid = g => state.trackers.filter(t => t.group === g).map(trackerButton).join('');
+  const t = todayObs();
+  el().innerHTML = `<h1>Idag</h1><p class="lead muted" style="margin-top:0">${esc(longDate(today()))}</p>
+<section class="card"><h2>Hur mår du?</h2><div class="tgrid">${grid('checkin')}</div>
+<p class="small muted">Tryck för att välja. På skalor 1–10 kan du också hålla in och dra uppåt eller nedåt för att snabbt sätta värdet.</p></section>
+<section class="card"><h2>Något hände</h2><div class="tgrid">${grid('event')}</div></section>
+<section class="card"><h2>Idag hittills</h2>${entries(t, true)}</section>
+<div class="notice small"><strong>Testläge:</strong> Registrera inga riktiga hälsouppgifter. All data sparas lokalt i den här webbläsaren och kan raderas.</div>`;
+  bindTrackerButtons();
+  bindDeletes();
 }
 
-function checkinView() {
-  const ts = state.trackers.filter(t => t.group === 'checkin');
-  el().innerHTML = `<h1>Daglig check-in</h1><p class="muted">En kort stund för att lägga märke till hur dagen känns.</p>
-<form id="checkForm" class="card"><div class="field"><label for="date">Datum</label><input id="date" name="date" type="date" required value="${today()}"></div>
-${ts.map(t => field(t)).join('')}
-<div class="field"><label for="note">Egen anteckning (valfri)</label><textarea id="note" name="note" placeholder="Vad vill du komma ihåg?"></textarea></div>
-<button class="btn primary" type="submit">Spara check-in</button></form>`;
-  document.getElementById('checkForm').onsubmit = saveCheckin;
-}
-
-function eventView() {
-  const ts = state.trackers.filter(t => t.group === 'event');
-  el().innerHTML = `<h1>Registrera händelse</h1><p class="muted">När något händer, oavsett daglig check-in.</p>
-<form id="eventForm" class="card">
-<div class="field"><label for="eventDate">När började det?</label><input id="eventDate" name="date" type="datetime-local" required value="${nowLocalMinute()}"></div>
-<div class="field"><label for="eventEnd">När tog det slut? (valfritt)</label><input id="eventEnd" name="end" type="datetime-local"></div>
-<div class="field"><label for="eventType">Vad vill du registrera?</label><select id="eventType" name="type">${ts.map(t => `<option value="${esc(t.id)}">${esc(t.label)}</option>`).join('')}</select></div>
-<div id="eventValue"></div>
-<div class="field"><label for="eventNote">Anteckning (valfri)</label><textarea id="eventNote" name="note"></textarea></div>
-<button class="btn primary" type="submit">Spara händelse</button></form>`;
-  const sel = document.getElementById('eventType');
-  const draw = () => { const t = tracker(sel.value); document.getElementById('eventValue').innerHTML = t ? field(t, true) : ''; };
-  sel.onchange = draw; draw();
-  document.getElementById('eventForm').onsubmit = saveEvent;
-}
-
-function historyView() {
-  const rows = state.observations.slice(0, shown);
-  const more = state.observations.length > shown;
-  el().innerHTML = `<h1>Din historik</h1><p class="muted">Här samlas dina registreringar.</p>
-<section class="card">${entries(rows)}${more ? `<button class="btn" id="more" style="margin-top:12px;width:100%">Visa fler (${state.observations.length - shown} till)</button>` : ''}</section>`;
+function bindDeletes() {
   document.querySelectorAll('[data-delete]').forEach(b => b.onclick = async () => {
     if (!confirm('Ta bort den här registreringen?')) return;
     await store.deleteObservations([b.dataset.delete]);
     await refresh(); render();
   });
-  const m = document.getElementById('more');
-  if (m) m.onclick = () => { shown += 150; render(); };
+}
+
+/* Tryck = öppna ark. Håll in (≈0,35 s) utan att röra fingret, dra upp/ned = sätt skala 1–10 direkt.
+   Släpp utan att ha dragit = öppna arket. Dra långt åt sidan = avbryt. Rörelse före håll = vanlig scroll. */
+const HOLD_MS = 350, STEP_PX = 24, MOVE_CANCEL = 10, SIDE_CANCEL = 90;
+let dragging = false;
+
+function dragShow(t, v, cancel) {
+  const o = document.getElementById('dragOv');
+  o.style.display = 'flex';
+  o.innerHTML = `<div class="small">${esc(t.label)}</div><div class="num">${cancel ? '✕' : v}</div><div class="track"><div class="fill" style="height:${cancel ? 0 : v * 10}%"></div></div><div class="tip">${cancel ? 'Släpp för att avbryta' : 'Dra upp eller ned. Släpp för att spara.'}</div>`;
+}
+function dragHide() { dragging = false; document.getElementById('dragOv').style.display = 'none'; }
+
+function bindTrackerButtons() {
+  document.querySelectorAll('[data-track]').forEach(btn => {
+    const t = tracker(btn.dataset.track);
+    if (!t) return;
+    let st = null;
+    btn.addEventListener('contextmenu', e => e.preventDefault());
+    btn.addEventListener('click', () => { if (Date.now() < (btn._noClick || 0)) return; openSheet(t); });
+    if (t.kind !== 'scale') return;
+    btn.addEventListener('pointerdown', e => {
+      if (e.pointerType === 'mouse' && e.button !== 0) return;
+      st = { id: e.pointerId, x: e.clientX, y: e.clientY, drag: false, moved: false, cancel: false, value: 5 };
+      st.timer = setTimeout(() => {
+        st.drag = true; dragging = true; btn.classList.add('hold');
+        try { btn.setPointerCapture(st.id); } catch (_) {}
+        if (navigator.vibrate) navigator.vibrate(10);
+        dragShow(t, st.value);
+      }, HOLD_MS);
+    });
+    btn.addEventListener('pointermove', e => {
+      if (!st || e.pointerId !== st.id) return;
+      const dx = e.clientX - st.x, dy = e.clientY - st.y;
+      if (!st.drag) { if (Math.hypot(dx, dy) > MOVE_CANCEL) { clearTimeout(st.timer); st = null; } return; }
+      e.preventDefault();
+      if (Math.abs(dy) > 8) st.moved = true;
+      st.cancel = Math.abs(dx) > SIDE_CANCEL;
+      st.value = Math.max(1, Math.min(10, Math.round(5 - dy / STEP_PX)));
+      dragShow(t, st.value, st.cancel);
+    });
+    const finish = async (e, aborted) => {
+      if (!st || e.pointerId !== st.id) return;
+      clearTimeout(st.timer);
+      const s = st; st = null;
+      btn.classList.remove('hold');
+      if (!s.drag) return;
+      dragHide(); btn._noClick = Date.now() + 500;
+      if (aborted || s.cancel) { toast('Avbrutet'); return; }
+      if (!s.moved) { openSheet(t); return; }
+      await saveObservation(t, s.value, nowLocalMinute(), '', null);
+    };
+    btn.addEventListener('pointerup', e => finish(e, false));
+    btn.addEventListener('pointercancel', e => finish(e, true));
+  });
+}
+
+function closeSheet() { const b = document.getElementById('sheetBg'); b.style.display = 'none'; b.innerHTML = ''; }
+
+function openSheet(t) {
+  const bg = document.getElementById('sheetBg');
+  const ev = t.group === 'event';
+  let input;
+  if (t.kind === 'scale') input = `<div class="big" id="bigv">5</div><input type="range" name="value" id="sv" min="1" max="10" step="1" value="5" aria-label="${esc(t.label)}, 1 till 10"><div class="rangelab"><span>1</span><span>10</span></div>`;
+  else if (t.kind === 'boolean') input = `<div class="field"><label for="shVal">Hände det?</label><select id="shVal" name="value"><option value="true">Ja</option><option value="false">Nej</option></select></div>`;
+  else input = `<div class="field"><label for="shVal">${esc(t.label)}${t.unit ? ' (' + esc(t.unit) + ')' : ''}</label><input id="shVal" type="number" inputmode="decimal" name="value" step="0.1" min="0" required placeholder="${esc(t.unit || 'Ange värde')}"></div>`;
+  bg.innerHTML = `<div id="sheet" role="dialog" aria-modal="true" aria-label="${esc(t.label)}"><h2>${esc(t.label)}</h2><form id="sheetForm">${input}
+<div class="field"><label for="shDate">När</label><input id="shDate" name="date" type="datetime-local" required value="${nowLocalMinute()}"></div>
+${ev ? '<div class="field"><label for="shEnd">När tog det slut? (valfritt)</label><input id="shEnd" name="end" type="datetime-local"></div>' : ''}
+<div class="field"><label for="shNote">Anteckning (valfri)</label><textarea id="shNote" name="note"></textarea></div>
+<div class="actions"><button type="button" class="btn" id="shCancel">Avbryt</button><button class="btn primary" type="submit">Spara</button></div></form></div>`;
+  bg.style.display = 'flex';
+  const sv = document.getElementById('sv');
+  if (sv) sv.oninput = () => { document.getElementById('bigv').textContent = sv.value; };
+  document.getElementById('shCancel').onclick = closeSheet;
+  bg.onclick = e => { if (e.target === bg) closeSheet(); };
+  document.getElementById('sheetForm').onsubmit = async e => {
+    e.preventDefault();
+    try {
+      const f = new FormData(e.target), date = String(f.get('date')), end = String(f.get('end') || '');
+      const value = parseValue(t, f.get('value'));
+      if (value === null) throw Error('Välj ett värde');
+      if (!DT_RE.test(date) || dayNum(date) === null) throw Error('Ogiltig tid');
+      if (end && (!DT_RE.test(end) || dayNum(end) === null)) throw Error('Ogiltig sluttid');
+      if (end && end < date) throw Error('Sluttiden kan inte vara före starten');
+      closeSheet();
+      await saveObservation(t, value, date, String(f.get('note') || '').slice(0, 1000), end || null);
+    } catch (err) { toast(err.message); }
+  };
+  (document.getElementById('sv') || document.getElementById('shVal')).focus();
+}
+
+async function saveObservation(t, value, date, note, end) {
+  const o = makeObs(t, value, date, note, end);
+  await store.putAll([], [o]);
+  await refresh(); render();
+  const shown = value === true ? 'Ja' : value === false ? 'Nej' : value;
+  toast(`${t.label}: ${shown} sparad`, async () => { await store.deleteObservations([o.id]); await refresh(); render(); });
+}
+
+/* ---------- Kalender: vilka dagar finns något loggat? ---------- */
+let cal = null;
+
+function calendarView() {
+  if (!cal) { const d = new Date(dayNum(today()) * 86400000); cal = { y: d.getUTCFullYear(), m: d.getUTCMonth(), sel: today() }; }
+  const counts = new Map();
+  for (const o of state.observations) { const d = dayNum(o.occurredAt); if (d !== null) counts.set(d, (counts.get(d) || 0) + 1); }
+  let firstLogged = null;
+  for (const d of counts.keys()) if (firstLogged === null || d < firstLogged) firstLogged = d;
+  const t0 = dayNum(today());
+  const lead = (new Date(Date.UTC(cal.y, cal.m, 1)).getUTCDay() + 6) % 7;
+  const dim = new Date(Date.UTC(cal.y, cal.m + 1, 0)).getUTCDate();
+  let cells = ['Mån', 'Tis', 'Ons', 'Tors', 'Fre', 'Lör', 'Sön'].map(d => `<div class="dh">${d}</div>`).join('') + '<div class="blank"></div>'.repeat(lead);
+  for (let d = 1; d <= dim; d++) {
+    const n = Math.round(Date.UTC(cal.y, cal.m, d) / 86400000), ds = dayStr(n), c = counts.get(n) || 0;
+    const cls = [c ? 'logged ' + (c >= 5 ? 'l3' : c >= 3 ? 'l2' : 'l1') : (firstLogged !== null && n >= firstLogged && n <= t0 ? 'missing' : ''), n > t0 ? 'future' : '', n === t0 ? 'today' : '', ds === cal.sel ? 'sel' : ''].filter(Boolean).join(' ');
+    cells += `<button type="button" class="${cls}" data-day="${ds}" aria-label="${d} ${MONTHS[cal.m]}, ${c ? plural(c, 'registrering', 'registreringar') : 'inget loggat'}">${d}</button>`;
+  }
+  const rows = state.observations.filter(o => o.occurredAt.slice(0, 10) === cal.sel);
+  el().innerHTML = `<h1>Kalender</h1>
+<section class="card"><div class="calhead"><button class="iconbtn" id="calPrev" aria-label="Föregående månad">‹</button><h2>${MONTHS[cal.m]} ${cal.y}</h2><button class="iconbtn" id="calNext" aria-label="Nästa månad">›</button></div>
+<div class="cal">${cells}</div>
+<div class="legend"><span><i style="background:#e7d9ed"></i><i style="background:#b99bc9"></i><i style="background:#8b6ca1"></i>Mer loggat</span><span><i style="border:1px dashed #c9bccd"></i>Inget loggat</span></div></section>
+<section class="card"><h2>${esc(longDate(cal.sel))}</h2>${entries(rows, true)}</section>`;
+  const move = k => { cal.m += k; if (cal.m < 0) { cal.m = 11; cal.y--; } if (cal.m > 11) { cal.m = 0; cal.y++; } render(); };
+  document.getElementById('calPrev').onclick = () => move(-1);
+  document.getElementById('calNext').onclick = () => move(1);
+  document.querySelectorAll('[data-day]').forEach(b => b.onclick = () => { cal.sel = b.dataset.day; render(); });
+  bindDeletes();
 }
 
 function settingsView() {
   const hasDemo = state.observations.some(o => o.source === 'demo');
   el().innerHTML = `<h1>Inställningar</h1>
 <section class="card"><h2>Det du följer</h2><p class="small muted">Du kan lägga till egna kategorier. Befintliga registreringar påverkas inte.</p>
-${state.trackers.map(t => `<div class="entry"><strong>${esc(t.label)}</strong><span class="meta">${t.group === 'checkin' ? 'Daglig check-in' : 'Händelse'} · ${esc(t.kind)}</span></div>`).join('')}
+${state.trackers.map(t => `<div class="entry"><strong>${esc(t.label)}</strong><span class="meta">${t.group === 'checkin' ? 'Hur mår du?' : 'Något hände'} · ${esc(t.kind)}</span></div>`).join('')}
 <form id="trackerForm"><h3 style="margin-top:18px">Lägg till egen kategori</h3>
 <div class="field"><label for="trackerName">Namn</label><input id="trackerName" maxlength="70" required placeholder="Exempel: Huvudvärk"></div>
-<div class="two"><div class="field"><label for="trackerGroup">Registreras som</label><select id="trackerGroup"><option value="event">Händelse</option><option value="checkin">Check-in</option></select></div>
+<div class="two"><div class="field"><label for="trackerGroup">Registreras som</label><select id="trackerGroup"><option value="event">Något hände</option><option value="checkin">Hur mår du?</option></select></div>
 <div class="field"><label for="trackerKind">Typ av värde</label><select id="trackerKind"><option value="scale">Skala 1–10</option><option value="boolean">Ja/nej</option><option value="number">Tal</option></select></div></div>
 <button class="btn soft">Lägg till</button></form></section>
 <section class="card"><h2>Fiktiv demodata</h2><p class="small muted">Fyller appen med ett påhittat halvår (mens, migrän, smärta, check-ins) så att du kan prova mönstervyn direkt. Markeras som fiktiv och kan tas bort separat.</p>
@@ -197,26 +315,17 @@ ${state.trackers.map(t => `<div class="entry"><strong>${esc(t.label)}</strong><s
 }
 
 /* ---------- Formulär och poster ---------- */
-function field(t, event = false) {
-  const name = event ? 'value' : 'v_' + t.id;
-  let input;
-  if (t.kind === 'boolean') input = `<select name="${esc(name)}"><option value="">Välj…</option><option value="true">Ja</option><option value="false">Nej</option></select>`;
-  else if (t.kind === 'scale') input = `<select name="${esc(name)}"><option value="">Hoppa över</option>${Array.from({ length: 10 }, (_, i) => `<option value="${i + 1}">${i + 1}</option>`).join('')}</select>`;
-  else input = `<input type="number" name="${esc(name)}" step="0.1" min="0" placeholder="${esc(t.unit || 'Ange värde')}">`;
-  return `<div class="field"><label>${esc(t.label)}${t.unit ? ' (' + esc(t.unit) + ')' : ''}</label>${input}</div>`;
-}
-
 function sourceLabel(s) { return s === 'manual' ? 'Manuellt' : s === 'demo' ? 'Fiktiv demodata' : esc(s); }
 
-function entries(rows) {
+function entries(rows, del = false) {
   if (!rows.length) return '<div class="empty">Inga registreringar ännu.</div>';
   return rows.map(o => {
     const t = tracker(o.trackerId);
     const v = o.value === true ? 'Ja' : o.value === false ? 'Nej' : esc(o.value);
     const end = o.endedAt ? ' → ' + esc(o.endedAt.replace('T', ' ')) : '';
-    return `<div class="entry"><strong>${esc(t?.label || o.trackerId)} · ${v}${t?.unit && typeof o.value === 'number' ? ' ' + esc(t.unit) : ''}</strong>
+    return `<div class="entry"><strong>${esc(t?.label || o.trackerId)} · ${v}${t?.kind === 'scale' ? ' av 10' : t?.unit && typeof o.value === 'number' ? ' ' + esc(t.unit) : ''}</strong>
 <div class="meta">${esc(o.occurredAt.replace('T', ' '))}${end} · ${sourceLabel(o.source)}${o.note ? ' · ' + esc(o.note) : ''}</div>
-${tab === 'history' ? `<button class="chip" style="margin-top:8px" data-delete="${esc(o.id)}">Ta bort</button>` : ''}</div>`;
+${del ? `<button class="chip" style="margin-top:8px" data-delete="${esc(o.id)}">Ta bort</button>` : ''}</div>`;
   }).join('');
 }
 
@@ -230,35 +339,6 @@ function parseValue(t, raw) {
 
 function makeObs(t, value, date, note = '', endedAt = null) {
   return { id: uid(), trackerId: t.id, value, occurredAt: date, endedAt, recordedAt: new Date().toISOString(), source: 'manual', sourceId: null, note, visibility: 'private' };
-}
-
-async function saveCheckin(e) {
-  e.preventDefault();
-  try {
-    const f = new FormData(e.target), date = f.get('date'), note = String(f.get('note') || '').slice(0, 1000);
-    if (dayNum(date) === null || !/^\d{4}-\d{2}-\d{2}$/.test(date)) throw Error('Ogiltigt datum');
-    const rows = state.trackers.filter(t => t.group === 'checkin')
-      .map(t => ({ t, value: parseValue(t, f.get('v_' + t.id)) }))
-      .filter(x => x.value !== null)
-      .map(x => makeObs(x.t, x.value, date + 'T12:00', note));
-    if (!rows.length) return toast('Välj minst ett värde');
-    await store.putAll([], rows);
-    await refresh(); toast('Check-in sparad'); nav('home');
-  } catch (err) { toast(err.message); }
-}
-
-async function saveEvent(e) {
-  e.preventDefault();
-  try {
-    const f = new FormData(e.target), t = tracker(f.get('type'));
-    const value = parseValue(t, f.get('value')), date = String(f.get('date')), end = String(f.get('end') || '');
-    if (value === null) return toast('Välj ett värde');
-    if (!DT_RE.test(date) || dayNum(date) === null) throw Error('Ogiltig tid');
-    if (end && (!DT_RE.test(end) || dayNum(end) === null)) throw Error('Ogiltig sluttid');
-    if (end && end < date) throw Error('Sluttiden kan inte vara före starten');
-    await store.putAll([], [makeObs(t, value, date, String(f.get('note') || '').slice(0, 1000), end || null)]);
-    await refresh(); toast('Händelse sparad'); nav('home');
-  } catch (err) { toast(err.message); }
 }
 
 async function addTracker(e) {
@@ -482,6 +562,8 @@ async function init() {
     if (!(await store.getTrackers()).length) await store.putAll(defaults, []);
     await refresh();
     document.querySelectorAll('[data-tab]').forEach(b => { b.onclick = () => nav(b.dataset.tab); });
+    document.addEventListener('touchmove', e => { if (dragging) e.preventDefault(); }, { passive: false });
+    document.addEventListener('keydown', e => { if (e.key === 'Escape') closeSheet(); });
     render();
     if ('serviceWorker' in navigator && location.protocol !== 'file:') navigator.serviceWorker.register('./sw.js').catch(() => {});
   } catch (e) {
