@@ -1,4 +1,4 @@
-# Soma Demo 0.3 – ENDAST FIKTIVA DATA
+# Soma Demo 0.3.1 – ENDAST FIKTIVA DATA
 
 **Status: testad i Chromium på dator (88 av 88 automatiska kontroller, `tests/beta03_browsertest.js`, även under undersökväg). EJ testad på riktig iPhone/Android. Håll-och-dra-gesten är bara simulerad med mus/pekare i Chromium.** 0.1 och 0.2 ligger orörda i `../beta_01/` och `../beta_02/`.
 
@@ -19,4 +19,5 @@ Skalvärden visas som "6 av 10". Datum skrivs "Söndag 15 november".
 - Heatmapen räknar antal poster, inte hur "bra" en dag var.
 - Tidigare 6-flikars historikvy är borttagen. Radering sker i kalenderns dagdetalj eller i listan på Idag.
 - Platshållare i Mönster är oförändrade (`MIN_N = 6`, `STRONG_DIFF = 20`).
-- Tema (mörkt/lila) är inte genomfört, kommer som egen release.
+- **0.3.1: mörkt tema** (svart/mörkgrått med lila nyanser). Alla textfärgspar har räknats mot WCAG 4,5:1 och grafiska element mot 3:1 (se `tests/`-skärmbilder `beta03_mork_*.png`). Appen är bara mörk, följer inte telefonens ljusa läge. Ikonen (`icon-*.png`) har fortfarande ljus bakgrund och är inte ändrad. Ej testat på riktig telefon.
+- Kalender: vald dag har vit ram, idag är understruken.

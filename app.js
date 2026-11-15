@@ -276,7 +276,7 @@ function calendarView() {
   el().innerHTML = `<h1>Kalender</h1>
 <section class="card"><div class="calhead"><button class="iconbtn" id="calPrev" aria-label="Föregående månad">‹</button><h2>${MONTHS[cal.m]} ${cal.y}</h2><button class="iconbtn" id="calNext" aria-label="Nästa månad">›</button></div>
 <div class="cal">${cells}</div>
-<div class="legend"><span><i style="background:#e7d9ed"></i><i style="background:#b99bc9"></i><i style="background:#8b6ca1"></i>Mer loggat</span><span><i style="border:1px dashed #c9bccd"></i>Inget loggat</span></div></section>
+<div class="legend"><span><i style="background:#735b91"></i><i style="background:#a384c0"></i><i style="background:#d9c3ec"></i>Mer loggat</span><span><i style="border:1px dashed #6e6578"></i>Inget loggat</span></div></section>
 <section class="card"><h2>${esc(longDate(cal.sel))}</h2>${entries(rows, true)}</section>`;
   const move = k => { cal.m += k; if (cal.m < 0) { cal.m = 11; cal.y--; } if (cal.m > 11) { cal.m = 0; cal.y++; } render(); };
   document.getElementById('calPrev').onclick = () => move(-1);
